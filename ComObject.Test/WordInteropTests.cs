@@ -10,11 +10,25 @@ namespace ComObject.Test
         : IDisposable
     {
         [Fact]
+        public void Open_document()
+        {
+            var docx = GetTempFile(".docx");
+
+            File.Copy(@"Files\Document.docx", docx);
+
+            var document = OpenDocument(docx);
+
+            Assert.Equal("Paragraph 1", document.Paragraphs[1].Range.Text.Trim());
+        }
+
+        [Fact]
         public void Save_document()
         {
-            var docx = GetTempFile(".pdf");
+            var docx = GetTempFile(".docx");
 
-            _document.SaveAs(docx);
+            var document = NewDocument();
+
+            document.SaveAs(docx);
 
             Assert.True(File.Exists(docx));
         }
@@ -26,7 +40,9 @@ namespace ComObject.Test
 
             var doc = GetTempFile(".doc");
 
-            _document.SaveAs(doc, wdFormatDocument);
+            var document = NewDocument();
+
+            document.SaveAs(doc, wdFormatDocument);
 
             Assert.True(File.Exists(doc));
         }
@@ -38,7 +54,9 @@ namespace ComObject.Test
 
             var pdf = GetTempFile(".pdf");
 
-            _document.SaveAs(pdf, wdFormatPDF);
+            var document = NewDocument();
+
+            document.SaveAs(pdf, wdFormatPDF);
 
             Assert.True(File.Exists(pdf));
         }
@@ -46,13 +64,15 @@ namespace ComObject.Test
         [Fact]
         public void Add_paragraph()
         {
-            var paragraph = _document.Paragraphs.Add();
+            var document = NewDocument();
+
+            var paragraph = document.Paragraphs.Add();
 
             const string text = "Pagragraph 1";
 
             paragraph.Range.Text = text;
 
-            Assert.Equal(_document.Paragraphs[1].Range.Text.Trim(), text);
+            Assert.Equal(document.Paragraphs[1].Range.Text.Trim(), text);
         }
 
         [Theory]
@@ -64,7 +84,9 @@ namespace ComObject.Test
             const int wdFindContinue = 1;
             const int wdReplaceAll = 2;
 
-            var paragraph = _document.Paragraphs.Add();
+            var document = NewDocument();
+
+            var paragraph = document.Paragraphs.Add();
 
             paragraph.Range.Text = search;
 
@@ -86,7 +108,7 @@ namespace ComObject.Test
 
             _application.Selection.Find.Execute(Type.Missing, Type.Missing, Type.Missing, Type.Missing, Type.Missing, Type.Missing, Type.Missing, Type.Missing, Type.Missing, Type.Missing, wdReplaceAll);
 
-            Assert.Equal(replace, _document.Paragraphs[1].Range.Text.Trim());
+            Assert.Equal(replace, document.Paragraphs[1].Range.Text.Trim());
         }
 
         public WordInteropTests()
@@ -94,8 +116,6 @@ namespace ComObject.Test
             _application = new ComObject("Word.Application");
 
             _application.Visible = false;
-
-            _document = _application.Documents.Add();
         }
 
         private string GetTempFile(
@@ -108,10 +128,32 @@ namespace ComObject.Test
             return file;
         }
 
+        private dynamic NewDocument()
+        {
+            var document = _application.Documents.Add();
+
+            _documents.Add(document);
+
+            return document;
+        }
+
+        private dynamic OpenDocument(
+            string path)
+        {
+            var document = _application.Documents.Open(Path.GetFullPath(path));
+
+            _documents.Add(document);
+
+            return document;
+        }
+
         public void Dispose()
         {
-            _document.Close(false);
-            _document.Dispose();
+            foreach (var document in _documents)
+            {
+                document.Close(false);
+                document.Dispose();
+            }
 
             _application.Quit(false);
             _application.Dispose();
@@ -123,7 +165,7 @@ namespace ComObject.Test
         }
 
         private readonly dynamic _application;
-        private readonly dynamic _document;
         private readonly List<string> _files = new List<string>();
+        private readonly List<dynamic> _documents = new List<dynamic>();
     }
 }
