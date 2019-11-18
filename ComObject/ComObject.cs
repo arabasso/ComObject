@@ -44,24 +44,17 @@ namespace ComObject
             SetMemberBinder binder,
             object value)
         {
-            Type.SetProperty(binder.Name, Object, value is ComObject o ? o.Object : value);
+            Type.SetProperty(binder.Name, Object,  TransformValue(value));
 
             return true;
         }
-
-        private readonly HashSet<ComObject> _objects = new HashSet<ComObject>();
 
         public override bool TryGetIndex(
             GetIndexBinder binder,
             object[] indexes,
             out object result)
         {
-            result = Type.GetIndex(Object, indexes);
-
-            if (result != null && !IsPrimitive(result))
-            {
-                _objects.Add((ComObject)(result = new ComObject(result)));
-            }
+            result = TransformValue(Type.GetIndex(Object, indexes));
 
             return true;
         }
@@ -69,12 +62,7 @@ namespace ComObject
         public override bool TryGetMember(
             GetMemberBinder binder, out object result)
         {
-            result = Type.GetProperty(binder.Name, Object);
-
-            if (result != null && !IsPrimitive(result))
-            {
-                _objects.Add((ComObject)(result = new ComObject(result)));
-            }
+            result = TransformValue(Type.GetProperty(binder.Name, Object));
 
             return true;
         }
@@ -84,33 +72,33 @@ namespace ComObject
             object[] args,
             out object result)
         {
-            result = Type.InvokeMethod(binder.Name, Object, TransformArguments(args));
-
-            if (result != null && !IsPrimitive(result))
-            {
-                _objects.Add((ComObject)(result = new ComObject(result)));
-            }
+            result = TransformValue(Type.InvokeMethod(binder.Name, Object, args.Select(TransformValue).ToArray()));
 
             return true;
         }
 
-        private object[] TransformArguments(
-            IEnumerable args)
+        private object TransformValue(
+            object value)
         {
-            return args.Select(s =>
+            if (value == null) return null;
+
+            if (IsComObject(value))
             {
-                switch (s)
-                {
-                    case ComObject o:
-                        return o.Object;
+                _objects.Add((ComObject)(value = new ComObject(value)));
+            }
 
-                    case IEnumerable a:
-                        return IsPrimitive(s) ? s : TransformArguments(a);
+            else switch (value)
+            {
+                case IEnumerable a when !IsPrimitive(value):
+                    value = a.Select(TransformValue).ToArray();
+                    break;
 
-                    default:
-                        return s;
-                }
-            }).ToArray();
+                case ComObject o:
+                    value = o.Object;
+                    break;
+            }
+
+            return value;
         }
 
         public override bool TryConvert(
@@ -120,6 +108,14 @@ namespace ComObject
             result = Object;
 
             return true;
+        }
+
+        private bool IsComObject(
+            object o)
+        {
+            var t = o.GetType();
+
+            return t.Name == "__ComObject";
         }
 
         private bool IsPrimitive(
@@ -158,5 +154,7 @@ namespace ComObject
 
             Marshal.ReleaseComObject(Object);
         }
+
+        private readonly HashSet<ComObject> _objects = new HashSet<ComObject>();
     }
 }
